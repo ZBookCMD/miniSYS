@@ -1,0 +1,384 @@
+#!/usr/bin/bash
+# ---
+# 
+# Minimal System Group
+# 
+# ---
+#
+# Writted by ZBookCMD | Robert Nilson
+#
+
+printf "This script is for installation distribution on disk. \n"
+printf "The script does not provide disk partitioning. \n"
+printf "You have to do it yourself via fdisk, parted, etc... \n"
+printf "To install, you need 1GB for the boot partition, and at least 10GB for the main partition. \n\n\n"
+
+printf "I agree that I have fulfilled the conditions \n"
+read -p "And agree to install the distribution: " agreement
+
+if [[ "$agreement" == "Y" || "$agreement" == "y" ]]; then
+   echo "First, enter needed information. "
+else
+   echo "You can always use the program again, or install distro yourself. "
+   exit 0
+fi
+
+
+
+# Set variables
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
+read -p "\ Enter Boot partition path: " boot_part
+read -p "\ Enter System partition path: " sys_part
+root_part=$(findmnt -n -o SOURCE /)
+mkfs_ext4="mkfs.ext4 -O ^has_journal -F"
+mkfs_vfat="mkfs.fat -F32"
+
+mkdir -p /var/log/installation
+
+system_target=/Media/System_Partition
+system_disk=/Media/System_Diskette
+
+mkdir -p $system_target
+mkdir -p $system_disk
+
+log_dir=/var/log/installation
+log=$log_dir/install.log
+copy=$log_dir/copy.log
+ext4_log=$log_dir/ext4.log
+vfat_log=$log_dir/vfat.log
+
+touch $log_dir/install.log
+touch $log_dir/copy.log
+touch $log_dir/ext4.log
+touch $log_dir/vfat.log
+
+# Write function that check commands at errors
+
+errors() {
+  if grep -iq "error" "$log"; then
+     echo "Error, stop script! "
+     echo "$(grep -i "error" "$log")"
+     exit 1
+  fi
+
+  if grep -iq "error" "$ext4_log"; then
+     echo "Error while work with EXT4! "
+     echo "$(grep -i "error" $ext4_log)"
+     exit 130
+  fi
+
+  if grep -iq "error" "$vfat_log"; then
+     echo "Error while work with VFAT! "
+     echo "$(grep -i "error" $vfat_log)"
+     exit 130
+  fi
+
+  if grep -iq "No space left" "$copy"; then
+     echo "Error copy files! "
+     echo "$(grep -i "No space left" "$log")" 
+     exit 255
+  fi
+
+  if grep -iq "I/O Error" "$copy"; then
+     echo "Input/Output error during copy files! "
+     exit 255     
+  fi
+}
+
+# Create log file
+
+touch $log
+echo "\ Created log file $log"
+
+# Check System partition file system and format it to ext4 if user agrees
+
+fs_sys_part=$(blkid -o value -s TYPE "$sys_part")
+
+if [[ "$fs_sys_part" == "ext4" ]]; then
+   echo "\ System partition formated in EXT4. " | tee -a $log
+   e2label "$sys_part" 'miniSYS'
+elif [[ "$fs_sys_part" == "ext2" || "$fs_sys_part" == "ext3" ]]; then
+   echo "\ Found a EXT2/EXT3 partition. "
+   read -p "\ Convert to EXT4? " should_i_convert
+
+   if [[ "$should_i" == "Y" || "$should_i" == "y" ]]; then
+        echo "\ WARNING! MAY CAUSE DATA LOSS! "
+        read -p "\ Proceed anyway? " exact_answer_convert
+
+        if [[ "$exact_answer_convert" == "Y" || "$exact_answer_convert" == "y" ]]; then
+             tune2fs -O has_journal $sys_part > $ext4_lot 2>&1
+             tune2fs -O extents,uninit_bg,dir_index $sys_part > $ext4_log 2>&1
+             echo "\ System Partition is now converted to EXT4. " | tee -a $log
+             e2fsck -pf $sys_part > $ext4_log 2>&1
+	     echo "\ Repair issues that might have occured. " | tee -a $log
+	     e2label "$sys_part" 'miniSYS'
+	     errors "$log"
+	     errors "$ext4_log"
+        else
+             echo "\ Process canceled " | tee -a $log
+             exit 1
+        fi
+   fi
+else
+   echo "\ System partition is NOT formated in EXT4! " | tee -a $log
+   read -p "\ Do you want to format the partition? " should_i
+
+   if [[ "$should_i" == "Y" || "$should_i" == "y" ]]; then
+        echo "\ WARNING! MAY CAUSE DATA LOSS! "
+        read -p "\ Proceed anyway?" exact_answer
+
+        if [[ "$exact_answer" == "Y" || "$exact_answer" == "y" ]]; then
+             $mkfs_ext4 $sys_part > "ext4_log" 2>&1
+             echo "\ System Partition is now formated in EXT4. " | tee -a $log
+	     e2label "$sys_part" 'miniSYS'
+	     errors "$log"
+	     errors "$ext4_log"
+	else
+	     echo "\ Process canceled " | tee -a $log
+	     exit 1
+	fi
+   fi
+fi
+
+
+
+# Check Boot partition file system and format it to FAT32 if user agrees
+
+fs_boot_part=$(blkid -o value -s TYPE "$boot_part")
+
+if [[ "$fs_boot_part" == "vfat" ]]; then
+   echo "\ Boot partition formated in FAT32. " | tee -a $log
+   fatlabel $boot_part 'miniSYS BSP' > $vfat_log 2>&1
+   errors "$vfat_log"
+else
+   echo "\ Boot partition is NOT formated in FAT32! " | tee -a $log
+   read -p "\ Do you want to format the partition? " should_i_fat
+
+   if [[ "$should_i_fat" == "Y" || "$should_i_fat" == "y" ]]; then
+	echo "\ WARNING! MAY CAUSE DATA LOSS! "
+	read -p "\ Proceed anyway? " exact_answer_fat
+
+	if [[ "$exact_answer_fat" == "Y" || "$exact_answer_fat" == "y" ]]; then
+	     $mkfs_vfat $boot_part > "$vfat_log" 2>&1
+	     echo "\ Boot partition is now formated in FAT32. " | tee -a $log
+	     fatlabel $boot_part 'miniSYS BSP' > $vfat_log 2>&1
+	     errors "$log"
+	     errors "$vfat_log"
+	else
+	     echo "\ Process canceled " | tee -a $log
+	     exit 1
+        fi
+   fi
+fi
+
+
+# Check if device block present and mount system partition
+
+if blkid $sys_part >/dev/null 2>&1; then
+   mkdir -p $system_target | tee -a $log
+   mount $sys_part $system_target | tee -a $log
+else
+   echo "\ System partition not found! " | tee -a $log
+   exit 1
+fi
+
+# Check if drive present and mount it
+
+if [ -n "$root_part" ]; then
+    mkdir -p $system_disk | tee -a $log
+    mount "$root_part" $system_disk | tee -a $log
+    echo "\ System Disk mounted" | tee -a $log
+else
+    echo "\ System Disk not found! " | tee -a $log
+    exit 1
+fi
+
+
+
+# Check if /Media/System_Diskette present and start copy files
+
+if [ -d $system_disk ]; then
+    echo "\ Starting copy files... This may take a few minutes..." | tee -a $log
+    rm -rf $system_target/lost+found
+    cp -Rv $system_disk/* $system_target/. > $copy 2>&1
+    errors "$log"
+    errors "$copy"
+else
+    echo "\ Drive partition not found! " | tee -a $log
+    exit 1
+fi
+
+
+
+# Check and mount boot partition
+
+if blkid $boot_part >/dev/null 2>&1; then
+   mkdir -p $system_target/boot | tee -a $log
+   mount $boot_part $system_target/boot | tee -a $log
+   echo "\ Boot partition mounted. " | tee -a $log
+else
+   echo "\ Boot partition not found! " | tee -a $log
+   exit 1
+fi
+
+
+
+# Copy bootloader (MAYBE NOT WORKED WITH GRUB LEGACY, NOT TESTED)
+
+uefi_type=$(cat /sys/firmware/efi/fw_platform_size)
+uuid_system=$(blkid -s PARTUUID -o value "$sys_part")
+uuid_boot=$(blkid -s PARTUUID -o value "$boot_part")
+
+cd $system_target/boot
+mkdir ./EFI
+if [ -n "$boot_part" ]; then
+   echo "\ Check boot mode " | tee -a $log
+   if [ "$uefi_type" == "64" ]; then
+      echo "\ Found x64 UEFI mode " | tee -a $log
+      echo "\ Installing systemd-boot " | tee -a $log
+      cp -Rv /usr/share/install/systemd-boot/BOOT ./EFI/. > $copy
+      rm -f ./EFI/BOOT/BOOTIA32.EFI
+      cp -Rv /usr/share/install/systemd-boot/loader ./ > $copy
+      errors "$log"
+      errors "$copy"
+      sed -i "s/PARTUUID/PARTUUID=$uuid_system/g" loader/entries/minisys.conf
+      sed -i "s/VERSION/$MINISYS/g" loader/entries/minisys.conf
+      echo "\ Copying kernel " | tee -a $log
+      cp /usr/share/install/vmlinuz-miniSYS ./ | tee -a $log
+      cd /Media/System_Partition
+   elif [ "$uefi_type" == "32" ]; then
+      echo "\ Found IA32 UEFI mode " | tee -a $log
+      echo "\ Installing systemd-boot " | tee -a $log
+      cp -Rv /usr/share/install/systemd-boot/BOOT ./EFI/. > $copy
+      rm -f ./EFI/BOOT/BOOTx64.efi
+      cp -Rv /usr/share/install/systemd-boot/loader ./ > $copy
+      errors "$log"
+      errors "$copy"
+      sed -i "s/PARTUUID/PARTUUID=$uuid_system/g" loader/entries/minisys.conf
+      sed -i "s/VERSION/$MINISYS/g" loader/entries/minisys.conf
+      echo "\ Copying kernel " | tee -a $log
+      cp /usr/share/install/vmlinuz-miniSYS ./ | tee -a $log
+      cd /Media/System_Partition
+   else
+      echo "\ UEFI mode not found! " | tee -a $log
+      read -p "\ Do you want to install GRUB Legacy? " grub_legacy
+        
+        if [ "$grub_legacy" = "Y" || "$grub_legacy" = "y" ]; then
+	   echo "\ For running Legacy you need DOS partition. " | tee -a $log
+	   read -p "\ Are you sure want to install? " exact_legacy
+	      
+	      if [ "$exact_legacy" == "Y" || "$exact_legacy" == "y" ]; then
+		 read -p "\ Enter the path to block device: " legacy_boot_path 
+		 echo "\ Installing GRUB Legacy..." | tee -a $log
+		 grub-install --target=i386-pc $legacy_boot_path > $grub 2>&1
+		 cp /usr/share/install/grub.cfg ./grub/. | tee -a $log
+		 sed -i "s/root=PARTUUID/root=PARTUUID=$uuid_system/g" ./grub/grub.cfg
+                 sed -i "s/VERSION/$MINISYS/g" ./grub/grub.cfg
+		 errors "$log"
+		 errors "$copy"
+		 cd $system_target
+	      fi
+	else 
+	   echo "\ You always can install bootloader with systemd-boot or GRUB" | tee -a $log
+	   cd $system_target
+	fi
+    fi
+fi
+
+
+
+# Run mkinitrfs for.. initrfs? 
+
+if [ -f /sbin/mkinitrfs ]; then
+   cp /etc/initrfs.d/init.file $system_target/etc/initrfs.d/init.file
+   sed -i "s/PARTUUID=XX/PARTUUID=$uuid_system/g" $system_target/etc/initrfs.d/init.file
+   echo "\ Start mkinitrfs... " | tee -a $log
+   bash /sbin/mkinitrfs | tee -a $log
+   echo "\ Copy initrfs... "
+   cp /boot/initrfs.cpio.gz $system_target/boot/. | tee -a $log
+   rm -f /boot/initrfs.cpio.gz
+fi
+
+
+# If fstab exist, burn it
+
+cd $system_target
+
+if [ -f ./etc/fstab ]; then
+   echo "\ Generating fstab " | tee -a $log
+   rm -f ./etc/fstab
+fi
+
+
+fstab_sys_part=$(blkid -o value -s TYPE "$sys_part")
+fstab_boot_part=$(blkid -o value -s TYPE "$boot_part")
+
+# It has pre-installed fstab file with variables in Installation_FS
+
+if [ -f /usr/share/install/fstab ]; then
+   cp /usr/share/install/fstab etc/fstab | tee -a $log
+   sed -i "s/uuid_system/PARTUUID=$uuid_system/g" etc/fstab
+   sed -i "s/uuid_boot/PARTUUID=$uuid_boot/g" etc/fstab
+   sed -i "s/fs_sys_part/ $fstab_sys_part/g" etc/fstab
+   sed -i "s/fs_boot_part/ $fstab_boot_part/g" etc/fstab
+fi
+  
+
+
+echo "\ Cleaning..."
+cd $system_target
+
+# Clearing residual files
+
+rm -rf usr/share/install
+rm -rf var/log/installation
+rm -rf install-to-disk
+
+umount $system_disk | tee -a $log
+rm -rf $system_disk | tee -a $log
+rm -rf $system_target/Media/System_Partition
+rm -rf $system_target/Media/System_Diskette
+
+read -p "\ Enter username for user: " username
+echo "\ Working in chroot"
+
+# Working in chroot, sets password, add they in sudoers and remove autlogin for localhost
+
+if [ -d $system_target ]; then
+   mount --bind /dev $system_target/dev | tee -a $log
+   chroot $system_target /bin/bash << EOF
+   /sbin/userdel localuser
+   /bin/rm -rf /Locals/localuser
+   /sbin/useradd -m $username
+   /bin/passwd $username
+   sed -i "s/localuser ALL=(ALL:ALL) NOPASSWD: ALL/$username ALL=(ALL:ALL) ALL/g" /etc/sudoers
+   sed -i "s/agetty --autologin localuser/agetty/g" /etc/systemd/system/getty.target.wants/getty@tty1.service
+EOF
+   echo "\ After reboot you can change root password, if you need. "
+   umount $system_target/dev
+   errors "$log"
+fi
+
+# Final. And show must go on
+
+cd ~
+umount $boot_part > $log
+umount $sys_part > $log
+errors "$log"
+rm -rf $system_target
+echo "\ miniSYS $MINISYS successfully installed on disk $sys_part"
+
+# ---
+#
+# Script tests
+#
+# ---
+# 
+# Test 1 - Failed - log files doesnt found; fatlabel error
+# Test 2 - Failed - sed in fstab symbol undefiend; init PARTUUID permanent(?)
+# Test 3 - Failed - log files in target block device does not deleted
+# Test 4 - Success - All worked. Exclude initrfs, 537MB its too much, maybe needed zstd
+# Test 5 - Success - For now initrfs DOES NOT contain firmware. its 23MB now, i hope nothing will happen...
+#
+# ---
