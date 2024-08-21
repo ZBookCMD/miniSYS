@@ -1,0 +1,325 @@
+#!/usr/bin/bash
+# ---
+#
+# Minimal System Group
+#
+# ---
+# 
+# Reritten by ZBookCMD | Robert Nilson
+# Based on mkinitramfs by Alexander E. Patrakov and Jeremy Huntwork
+
+# Set environments for work
+INIT_FILE=livecd.file
+INITRFS_FILE=initrfs.zst
+KERNEL_VERSION=$(uname -r)
+
+# Set path to directories in environments
+DATA=/etc/initrfs.d
+UNSORTED=/var/tmp/unsorted
+INIT_BUILD=/var/tmp/init_build_dir
+MICROCODE_BUILD=/var/tmp/microcode
+
+
+
+printf "\\ Create directories.. \n"
+
+touch /var/tmp/unsorted
+mkdir /var/tmp/init_build_dir
+mkdir /var/tmp/microcode
+
+
+# Function copy()
+copy()
+{
+  local file
+
+  if [ "$2" = "lib" ]; then
+    file=$(PATH=/usr/lib type -p $1)
+  else
+    file=$(type -p $1)
+  fi
+
+  if [ -n "$file" ] ; then
+    cp $file $INIT_BUILD/usr/$2
+  else
+    echo "Missing required file: $1 for directory $2"
+    rm -rf $INIT_BUILD $UNSORTED $MICROCODE_BUILD
+    exit 1
+  fi
+}
+
+
+
+# Exit if modules is not found
+if [ -n "$KERNEL_VERSION" ] && [ ! -d "/usr/lib/modules/$1" ] ; then
+  printf "No modules directory named $1"
+  exit 1
+fi
+
+
+
+printf "\\ Collect all needed programs.. \n"
+
+#In file envs BIN_F is /bin files, so SBIN_F is /sbin files, ok?
+BIN_F="sh bash zsh cat cp dd killall ls mkdir mknod mount "
+BIN_F="$BIN_F umount sed sleep ln rm uname"
+BIN_F="$BIN_F readlink basename"
+
+if [ -x /usr/bin/nano ] ; then BIN_F="$BIN_F nano"; fi
+if [ -x /usr/bin/vi ] ; then BIN_F="$BIN_F vi"; fi
+
+SBIN_F="modprobe blkid switch_root "
+
+# How i'm understand, udevadm is in /bin,
+# and other udev commands is in /sbin
+if [ -x /usr/bin/udevadm ] ; then BIN_F="$BIN_F udevadm"; fi
+
+# udev commands from /sbin
+for f in mdadm mdmon udevd udevadm; do
+  if [ -x /usr/sbin/$f ] ; then SBIN_F="$SBIN_F $f"; fi
+done
+
+# Add lvm if present (cannot be done with the others because it
+# also needs dmsetup
+if [ -x /usr/sbin/lvm ] ; then SBIN_F="$SBIN_F lvm dmsetup"; fi
+
+
+
+printf "\\ Create base file structure.. \n"
+
+mkdir -p $INIT_BUILD/dev
+mkdir -p $INIT_BUILD/run
+mkdir -p $INIT_BUILD/sys
+mkdir -p $INIT_BUILD/proc
+mkdir -p $INIT_BUILD/usr
+mkdir -p $INIT_BUILD/usr/bin
+mkdir -p $INIT_BUILD/usr/lib
+mkdir -p $INIT_BUILD/usr/lib/modules
+mkdir -p $INIT_BUILD/usr/sbin
+mkdir -p $INIT_BUILD/etc
+mkdir -p $INIT_BUILD/etc/modprobe.d
+mkdir -p $INIT_BUILD/etc/udev
+mkdir -p $INIT_BUILD/etc/udev/rules.d
+touch $INIT_BUILD/etc/modprobe.d/modprobe.conf
+cd $INIT_BUILD
+ln -s usr/bin  $INIT_BUILD/bin
+ln -s usr/lib  $INIT_BUILD/lib
+ln -s usr/sbin $INIT_BUILD/sbin
+ln -s lib      $INIT_BUILD/lib64
+
+printf "\\ Copy systemd and all libraries.. \n"
+
+# i hate it >:<
+cp -r /lib/systemd $INIT_BUILD/usr/lib/systemd
+cp /sbin/init $INIT_BUILD/usr/sbin/init
+cp /usr/bin/systemd-run $INIT_BUILD/usr/bin/systemd-run
+cp -r /bin/udevadm $INIT_BUILD/bin
+
+cp -r /usr/lib/libkmod.so.2.4.0 $INIT_BUILD/lib
+cp -r /usr/lib/libkmod.so.2 $INIT_BUILD/lib
+
+cp -r /usr/lib/libacl.so.1.1.2301 $INIT_BUILD/lib
+cp -r /usr/lib/libacl.so.1 $INIT_BUILD/lib
+
+cp -r /usr/lib/libcap.so.2.65 $INIT_BUILD/lib
+cp -r /usr/lib/libcap.so.2 $INIT_BUILD/lib
+
+cp -r /usr/lib/libcrypt.a $INIT_BUILD/lib
+cp -r /usr/lib/libcrypt.so $INIT_BUILD/lib
+cp -r /usr/lib/libcrypto.so $INIT_BUILD/lib
+cp -r /usr/lib/libcrypt.so.1 $INIT_BUILD/lib
+cp -r /usr/lib/libcrypto.so.3 $INIT_BUILD/lib
+
+cp -r /usr/lib/libm.so.6 $INIT_BUILD/lib
+
+cp -r /usr/lib/libattr.so.1.1.2501 $INIT_BUILD/lib
+cp -r /usr/lib/libattr.so.1 $INIT_BUILD/lib
+
+cp -r /usr/bin/busybox $INIT_BUILD/bin
+chmod +x $INIT_BUILD/bin/busybox
+
+# Create necessary device nodes
+touch $INIT_BUILD/dev/console && chmod 640 $INIT_BUILD/dev/console
+touch $INIT_BUILD/dev/null && chmod 664 $INIT_BUILD/dev/null
+
+
+
+# Install the udev configuration files
+if [ -f /etc/udev/udev.conf ]; then
+  cp /etc/udev/udev.conf $INIT_BUILD/etc/udev/udev.conf
+fi
+
+for file in $(find /etc/udev/rules.d/ -type f) ; do
+  cp $file $INIT_BUILD/etc/udev/rules.d
+done
+
+# Install any firmware present
+#cp -a /usr/lib/firmware $INIT_BUILD/usr/lib
+
+# Copy the RAID configuration file if present
+if [ -f /etc/mdadm.conf ]; then
+  cp /etc/mdadm.conf $INIT_BUILD/etc
+fi
+
+
+
+printf "\\ Copy init file.. \n"
+
+ln -s $INIT_BUILD/usr/bin/bash $INIT_BUILD/init
+
+#if [ -f $DATA/$INIT_FILE ]; then
+#    install -m0755 $DATA/$INIT_FILE /var/tmp/init_build_dir/init
+#    chmod +x $INIT_BUILD/init
+#  else
+#    printf "Init file not found! \n"
+#    printf "Check if file present in /etc/initrfs.d \n"
+#    rm -rf $INIT_BUILD $UNSORTED $MICROCODE_BUILD
+#    exit 1
+#fi
+
+if [ -n "$KERNEL_VERSION" ] ; then
+  if [ -x /usr/bin/kmod ] ; then
+    BIN_F="$BIN_F kmod"
+  else
+    BIN_F="$BIN_F lsmod"
+    SBIN_F="$SBIN_F insmod"
+  fi
+fi
+
+
+
+printf "\\ Install basic binaries.. \n"
+
+for f in $BIN_F ; do
+  ldd /usr/bin/$f | sed "s/\t//" | cut -d " " -f1 >> $UNSORTED
+  copy /usr/bin/$f bin
+done
+
+for f in $SBIN_F ; do
+  ldd /usr/sbin/$f | sed "s/\t//" | cut -d " " -f1 >> $UNSORTED
+  copy $f sbin
+done
+
+# Add udevd libraries if not in /usr/sbin
+if [ -x /usr/lib/udev/udevd ] ; then
+  ldd /usr/lib/udev/udevd | sed "s/\t//" | cut -d " " -f1 >> $UNSORTED
+elif [ -x /usr/lib/systemd/systemd-udevd ] ; then
+  ldd /usr/lib/systemd/systemd-udevd | sed "s/\t//" | cut -d " " -f1 >> $UNSORTED
+fi
+
+
+
+# Add module symlinks if appropriate
+if [ -n "$KERNEL_VERSION" ] && [ -x /usr/bin/kmod ] ; then
+  ln -s kmod $INIT_BUILD/usr/bin/lsmod
+  ln -s kmod $INIT_BUILD/usr/bin/insmod
+fi
+
+# Add lvm symlinks if appropriate
+# Also copy the lvm.conf file
+if  [ -x /usr/sbin/lvm ] ; then
+  ln -s lvm $INIT_BUILD/usr/sbin/lvchange
+  ln -s lvm $INIT_BUILD/usr/sbin/lvrename
+  ln -s lvm $INIT_BUILD/usr/sbin/lvextend
+  ln -s lvm $INIT_BUILD/usr/sbin/lvcreate
+  ln -s lvm $INIT_BUILD/usr/sbin/lvdisplay
+  ln -s lvm $INIT_BUILD/usr/sbin/lvscan
+
+  ln -s lvm $INIT_BUILD/usr/sbin/pvchange
+  ln -s lvm $INIT_BUILD/usr/sbin/pvck
+  ln -s lvm $INIT_BUILD/usr/sbin/pvcreate
+  ln -s lvm $INIT_BUILD/usr/sbin/pvdisplay
+  ln -s lvm $INIT_BUILD/usr/sbin/pvscan
+
+  ln -s lvm $INIT_BUILD/usr/sbin/vgchange
+  ln -s lvm $INIT_BUILD/usr/sbin/vgcreate
+  ln -s lvm $INIT_BUILD/usr/sbin/vgscan
+  ln -s lvm $INIT_BUILD/usr/sbin/vgrename
+  ln -s lvm $INIT_BUILD/usr/sbin/vgck
+  # Conf file(s)
+  cp -a /etc/lvm $INIT_BUILD/etc
+fi
+
+# Install libraries
+sort $UNSORTED | uniq | while read library ; do
+# linux-vdso and linux-gate are pseudo libraries and do not correspond to a file
+# libsystemd-shared is in /lib/systemd, so it is not found by copy, and
+# it is copied below anyway
+  if [[ "$library" == linux-vdso.so.1 ]] ||
+     [[ "$library" == linux-gate.so.1 ]] ||
+     [[ "$library" == libsystemd-shared* ]]; then
+    continue
+  fi
+
+  copy $library lib
+done
+
+if [ -d /usr/lib/udev ]; then
+  cp -a /usr/lib/udev $INIT_BUILD/usr/lib
+fi
+if [ -d /usr/lib/systemd ]; then
+  cp -a /usr/lib/systemd $INIT_BUILD/usr/lib
+fi
+if [ -d /usr/lib/elogind ]; then
+  cp -a /usr/lib/elogind $INIT_BUILD/usr/lib
+fi
+
+
+
+printf "\\ Install kernel modules.. \n"
+
+if [ -n "$KERNEL_VERSION" ]; then
+  find \
+     /usr/lib/modules/$KERNEL_VERSION/kernel/{crypto,fs,lib}                      \
+     /usr/lib/modules/$KERNEL_VERSION/kernel/drivers/{block,ata,nvme,md,firewire} \
+     /usr/lib/modules/$KERNEL_VERSION/kernel/drivers/{scsi,message,pcmcia,virtio} \
+     /usr/lib/modules/$KERNEL_VERSION/kernel/drivers/usb/{host,storage}           \
+     -type f 2> /dev/null | cpio --make-directories -p --quiet $INIT_BUILD
+
+  cp /usr/lib/modules/$KERNEL_VERSION/modules.{builtin,order} \
+            $INIT_BUILD/usr/lib/modules/$KERNEL_VERSION
+  if [ -f /usr/lib/modules/$KERNEL_VERSION/modules.builtin.modinfo ]; then
+    cp /usr/lib/modules/$KERNEL_VERSION/modules.builtin.modinfo \
+            $INIT_BUILD/usr/lib/modules/$KERNEL_VERSION
+  fi
+
+  depmod -b $INIT_BUILD $KERNEL_VERSION
+fi
+
+printf "\\ Compress initrfs.. \n"
+cd $INIT_BUILD
+sh -c "find . | cpio --quiet -o -H newc | zstd -r > /var/tmp/$INITRFS_FILE" 
+cd  /var/tmp
+
+
+#printf "\\ Prepare microcode.. \n"
+
+# Prepare early loading of microcode if available
+#if ls /usr/lib/firmware/intel-ucode/* >/dev/null 2>&1 ||
+#   ls /usr/lib/firmware/amd-ucode/*   >/dev/null 2>&1; then
+#
+#  DESTINATION=$MICROCODE_BUILD/kernel/x86/microcode
+#  mkdir -p $DESTINATION
+#
+#  if [ -d /usr/lib/firmware/amd-ucode ]; then
+#    cat /usr/lib/firmware/amd-ucode/microcode_amd*.bin > $DESTINATION/AuthenticAMD.bin
+#  fi
+#
+#  if [ -d /usr/lib/firmware/intel-ucode ]; then
+#    cat /usr/lib/firmware/intel-ucode/* > $DESTINATION/GenuineIntel.bin
+#  fi
+#
+#  sh -c "cd $MICROCODE_BUILD | find . | cpio -o -H newc --quiet > microcode.img"
+#  cat microcode.img $INITRFS_FILE > tmpfile
+#  mv tmpfile $INITRFS_FILE
+#  rm microcode.img
+#fi
+
+
+
+printf "\\ Final cleaning.. "
+# Remove the temporary directories and files
+mv $INITRFS_FILE /boot/
+cd /
+rm -rf $INIT_BUILD $MICROCODE_BUILD $UNSORTED
+echo "Done"
