@@ -11,8 +11,8 @@ But you can download source code and compile all you need.
 ## Will be soon
 My plans for future Alpha releases:
 - Xorg & Wayland
-- XFCE4 & GNUstep
 - own repositories
+- XFCE4 & GNUstep and maybe Plasma
 - and more.. more... 
 
 ## But wait.. Whats work now?
@@ -25,20 +25,20 @@ You can check the parameters in the list below.
 | Systemd init         | Yes     |                                   |
 | Chrooting            | Yes     |                                   |
 | Boot on real machine | Yes     | systemd-boot & GRUB               |
-| initrfs              | Yes     | i hope on it                      |
+| initrfs              | Partial | nie                               |
 | Framebuffer display  | Yes     | HD630, IrisXe G7 and RTX2070      |
 | \ i915               | Unknown | ...?                              |
 | \ amdgpu             | Unknown | ...?                              |
 | \ nouveau            | Unknown | ...?                              |
 | Ethernet             | Yes     | Realtek RTL8168 and Intel I219    | 
-| WiFi                 | Partial | Intel AX201 and MT7601U           |
+| WiFi                 | Partial | MT7601U                           |
 | Bluetooth            | No      | No utils                          |
 | USB Devices          | Yes     |                                   |
 | File systems support | Partial |                                   |
 | \ EXT4 & EXT3        | Yes     |                                   |
 | \ FAT32              | Yes     |                                   |
-| \ NTFS               | Unknown | Not tried, no utils               |
-| Virtual Machine boot | No      | QEMU black screen, VMWare unknown |
-| LiveCD               | Unknown | Trying now                        |
+| \ NTFS               | Unknown | Not works, no utils               |
+| Virtual Machine boot | No      | QEMU works and optimized for UTM  |
+| LiveCD               | Unknown | Uhh.. init in initrfs corrupted   |
 | Secure boot          | Unknown | Depends on bootloader, not tried  |
 ---
