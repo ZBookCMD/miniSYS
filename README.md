@@ -37,7 +37,7 @@ You can check the parameters in the list below.
 | File systems support | Partial |                                   |
 | \ EXT4 & EXT3        | Yes     |                                   |
 | \ FAT32              | Yes     |                                   |
-| \ NTFS               | Unknown | Not works, no utils               |
+| \ NTFS               | No      | Not works, no utils               |
 | \ APFS               | No      | Not works, no utils               |
 | Virtual Machine boot | Partial | QEMU works and optimized for UTM  |
 | LiveCD               | Unknown | Uhh.. init in initrfs corrupted   |
