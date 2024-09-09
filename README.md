@@ -38,7 +38,8 @@ You can check the parameters in the list below.
 | \ EXT4 & EXT3        | Yes     |                                   |
 | \ FAT32              | Yes     |                                   |
 | \ NTFS               | Unknown | Not works, no utils               |
-| Virtual Machine boot | No      | QEMU works and optimized for UTM  |
+| \ APFS               | No      | Not works, no utils               |
+| Virtual Machine boot | Partial | QEMU works and optimized for UTM  |
 | LiveCD               | Unknown | Uhh.. init in initrfs corrupted   |
 | Secure boot          | Unknown | Depends on bootloader, not tried  |
 ---
