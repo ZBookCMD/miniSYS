@@ -1,4 +1,8 @@
-![Logo](Logo.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/Logo.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/Logo_white.png">
+  <img alt="Distribution logo which looks like red mathematics inequality" src="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/Logo_white.png">
+</picture>
 
 # Minimal System Alpha branch
 based on [Linux From Scratch](https://linuxfromscratch.org/) and [FemboyOS](https://github.com/Sugaryyyy/FemboyOS) \
