@@ -228,7 +228,7 @@ fi
 # Copy bootloader (MAYBE NOT WORKED WITH GRUB LEGACY, NOT TESTED)
 
 uefi_type=$(cat /sys/firmware/efi/fw_platform_size)
-uuid_system_init=$(blkid -U "$sys_part")
+uuid_system_init=$(blkid -s UUID -o value "$sys_part")
 uuid_system=$(blkid -s PARTUUID -o value "$sys_part")
 uuid_boot=$(blkid -s PARTUUID -o value "$boot_part")
 uuid_boot_grub$(blkid -s UUID -o value "$uuid_boot")
@@ -298,27 +298,16 @@ if [ -n "$boot_part" ]; then
 fi
 
 
-
-# Run mkinitrfs for.. initrfs? 
-
-if [ -f /sbin/mkinitrfs ]; then
-   cp /etc/initrfs.d/init.file $system_target/etc/initrfs.d/init.file
-   sed -i "s/UUID=XX/UUID=$uuid_system_init/g" $system_target/etc/initrfs.d/init.file
-   echo "\ Start mkinitrfs... " | tee -a $log
-   bash /sbin/mkinitrfs | tee -a $log
-   echo "\ Copy initrfs... "
-   mv /boot/initrfs.cpio.gz $system_target/boot/miniSYS/. | tee -a $log
-   rm -f /boot/initrfs.cpio.gz
-fi
-
-
 # If fstab exist, burn it
 
 cd $system_target
 
 if [ -f ./etc/fstab ]; then
    echo "\ Generating fstab " | tee -a $log
-   rm -f ./etc/fstab
+   sed -i "s/#uuid_system/UUID=$uuid_system/g" etc/fstab
+   sed -i "s/#uuid_boot/UUID=$uuid_boot/g" etc/fstab
+   sed -i "s/fs_sys_part/ $fstab_sys_part/g" etc/fstab
+   sed -i "s/fs_boot_part/ $fstab_boot_part/g" etc/fstab
 fi
 
 
@@ -329,12 +318,11 @@ fstab_boot_part=$(blkid -o value -s TYPE "$boot_part")
 
 if [ -f /usr/share/install/fstab ]; then
    cp /usr/share/install/fstab etc/fstab | tee -a $log
-   sed -i "s/#uuid_system/PARTUUID=$uuid_system/g" etc/fstab
-   sed -i "s/#uuid_boot/PARTUUID=$uuid_boot/g" etc/fstab
+   sed -i "s/#uuid_system/UUID=$uuid_system/g" etc/fstab
+   sed -i "s/#uuid_boot/UUID=$uuid_boot/g" etc/fstab
    sed -i "s/fs_sys_part/ $fstab_sys_part/g" etc/fstab
    sed -i "s/fs_boot_part/ $fstab_boot_part/g" etc/fstab
 fi
-  
 
 
 echo "\ Cleaning..."
@@ -344,7 +332,12 @@ cd $system_target
 
 rm -rf usr/share/install
 rm -rf var/log/installation
-rm -rf install-to-disk
+rm -rf sbin/install-to-disk
+
+# Editing init for initrfs
+
+cp /etc/initrfs.d/init.file $system_target/etc/initrfs.d/init.file
+sed -i "s/UUID=XX/UUID=$uuis_system_init/g" $system_target/etc/initrfs.d/init.file
 
 umount $system_disk | tee -a $log
 rm -rf $system_disk | tee -a $log
@@ -357,7 +350,7 @@ echo "\ Working in chroot"
 # Working in chroot, sets password, add they in sudoers and remove autlogin for localhost
 
 if [ -d $system_target ]; then
-   mount --bind /dev $system_target/dev | tee -a $log
+   mount --bind /dev $system_target/dev 
    chroot $system_target /bin/bash << EOF
    /sbin/userdel localuser
    /bin/rm -rf /Locals/localuser
@@ -366,6 +359,17 @@ if [ -d $system_target ]; then
    /bin/passwd $username
    sed -i "s/localuser ALL=(ALL:ALL) NOPASSWD: ALL/$username ALL=(ALL:ALL) ALL/g" /etc/sudoers
    sed -i "s/-a localuser %I/%I/g" /etc/systemd/system/getty.target.wants/getty@tty1.service
+
+   if [ -f /sbin/mkinitrfs ]; then
+	mkdir -p /boot/miniSYS
+	echo "\ Start mkinitrfs... "
+	bash /sbin/mkinitrfs
+	if [ -f /boot/initrfs.zst ]; then
+		echo "\ Moving initrfs... "
+		mv /boot/initrfs.zst /boot/miniSYS/initrfs.zst
+	fi
+   fi
+
 EOF
    echo "\ After reboot you can change root password, if you need. "
    umount $system_target/dev
