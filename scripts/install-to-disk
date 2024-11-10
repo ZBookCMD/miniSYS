@@ -30,8 +30,8 @@ fi
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 read -p "\ Enter Boot partition path: " boot_part
 read -p "\ Enter System partition path: " sys_part
-root_part=$(findmnt -n -o SOURCE /)
-mkfs_ext4="mkfs.ext4 -O ^has_journal -F"
+root_part=/dev/loop0
+mkfs_ext4="mkfs.ext4 -L miniSYS -O ^has_journal -F"
 mkfs_vfat="mkfs.fat -F32"
 
 mkdir -p /var/log/installation
@@ -200,6 +200,7 @@ fi
 
 if [ -d $system_disk ]; then
     echo "\ Starting copy files... This may take a few minutes..." | tee -a $log
+    mkdir -p $system_disk
     rm -rf $system_target/lost+found
     cp -Rv $system_disk/* $system_target/. > $copy 2>&1
     errors "$log"
@@ -227,8 +228,11 @@ fi
 # Copy bootloader (MAYBE NOT WORKED WITH GRUB LEGACY, NOT TESTED)
 
 uefi_type=$(cat /sys/firmware/efi/fw_platform_size)
+uuid_system_init=$(blkid -U "$sys_part")
 uuid_system=$(blkid -s PARTUUID -o value "$sys_part")
 uuid_boot=$(blkid -s PARTUUID -o value "$boot_part")
+uuid_boot_grub$(blkid -s UUID -o value "$uuid_boot")
+
 
 cd $system_target/boot
 mkdir ./EFI
@@ -242,10 +246,12 @@ if [ -n "$boot_part" ]; then
       cp -Rv /usr/share/install/systemd-boot/loader ./ > $copy
       errors "$log"
       errors "$copy"
-      sed -i "s/PARTUUID/PARTUUID=$uuid_system/g" loader/entries/minisys.conf
       sed -i "s/VERSION/$MINISYS/g" loader/entries/minisys.conf
+      sed -i "s/VERSION/$MINISYS/g" loader/entries/minisys_dbg.conf
       echo "\ Copying kernel " | tee -a $log
-      cp /usr/share/install/vmlinuz-miniSYS ./ | tee -a $log
+      mkdir -p ./miniSYS
+      cp /usr/share/install/kernel ./miniSYS/kernel | tee -a $log
+      cp /usr/share/install/System.map ./miniSYS/System.map
       cd /Media/System_Partition
    elif [ "$uefi_type" == "32" ]; then
       echo "\ Found IA32 UEFI mode " | tee -a $log
@@ -255,10 +261,12 @@ if [ -n "$boot_part" ]; then
       cp -Rv /usr/share/install/systemd-boot/loader ./ > $copy
       errors "$log"
       errors "$copy"
-      sed -i "s/PARTUUID/PARTUUID=$uuid_system/g" loader/entries/minisys.conf
       sed -i "s/VERSION/$MINISYS/g" loader/entries/minisys.conf
+      sed -i "s/VERSION/$MINISYS/g" loader/entries/minisys_dbg.conf
       echo "\ Copying kernel " | tee -a $log
-      cp /usr/share/install/vmlinuz-miniSYS ./ | tee -a $log
+      mkdir -p ./miniSYS
+      cp /usr/share/install/kernel ./miniSYS/kernel | tee -a $log
+      cp /usr/share/install/System.map ./miniSYS/System.map | tee -a $log
       cd /Media/System_Partition
    else
       echo "\ UEFI mode not found! " | tee -a $log
@@ -271,10 +279,13 @@ if [ -n "$boot_part" ]; then
 	      if [ "$exact_legacy" == "Y" || "$exact_legacy" == "y" ]; then
 		 read -p "\ Enter the path to block device: " legacy_boot_path 
 		 echo "\ Installing GRUB Legacy..." | tee -a $log
+                 cd $system_target
 		 grub-install --target=i386-pc $legacy_boot_path > $grub 2>&1
+                 mount $legacy_boot_path $system_target/boot
+                 cd $system_target/boot
 		 cp /usr/share/install/grub.cfg ./grub/. | tee -a $log
-		 sed -i "s/root=PARTUUID/root=PARTUUID=$uuid_system/g" ./grub/grub.cfg
-                 sed -i "s/VERSION/$MINISYS/g" ./grub/grub.cfg
+		 sed -i "s/VERSION Alpha/$MINISYS/g" ./grub/grub.cfg
+                 sed -i "s/uuid_boot_grub/\/$uuid_boot_grub/g" ./grub/grub.cfg
 		 errors "$log"
 		 errors "$copy"
 		 cd $system_target
@@ -292,11 +303,11 @@ fi
 
 if [ -f /sbin/mkinitrfs ]; then
    cp /etc/initrfs.d/init.file $system_target/etc/initrfs.d/init.file
-   sed -i "s/PARTUUID=XX/PARTUUID=$uuid_system/g" $system_target/etc/initrfs.d/init.file
+   sed -i "s/UUID=XX/UUID=$uuid_system_init/g" $system_target/etc/initrfs.d/init.file
    echo "\ Start mkinitrfs... " | tee -a $log
    bash /sbin/mkinitrfs | tee -a $log
    echo "\ Copy initrfs... "
-   cp /boot/initrfs.cpio.gz $system_target/boot/. | tee -a $log
+   mv /boot/initrfs.cpio.gz $system_target/boot/miniSYS/. | tee -a $log
    rm -f /boot/initrfs.cpio.gz
 fi
 
@@ -318,8 +329,8 @@ fstab_boot_part=$(blkid -o value -s TYPE "$boot_part")
 
 if [ -f /usr/share/install/fstab ]; then
    cp /usr/share/install/fstab etc/fstab | tee -a $log
-   sed -i "s/uuid_system/PARTUUID=$uuid_system/g" etc/fstab
-   sed -i "s/uuid_boot/PARTUUID=$uuid_boot/g" etc/fstab
+   sed -i "s/#uuid_system/PARTUUID=$uuid_system/g" etc/fstab
+   sed -i "s/#uuid_boot/PARTUUID=$uuid_boot/g" etc/fstab
    sed -i "s/fs_sys_part/ $fstab_sys_part/g" etc/fstab
    sed -i "s/fs_boot_part/ $fstab_boot_part/g" etc/fstab
 fi
@@ -351,9 +362,10 @@ if [ -d $system_target ]; then
    /sbin/userdel localuser
    /bin/rm -rf /Locals/localuser
    /sbin/useradd -m $username
+   /sbin/usermod -Gwheel $username
    /bin/passwd $username
    sed -i "s/localuser ALL=(ALL:ALL) NOPASSWD: ALL/$username ALL=(ALL:ALL) ALL/g" /etc/sudoers
-   sed -i "s/agetty --autologin localuser/agetty/g" /etc/systemd/system/getty.target.wants/getty@tty1.service
+   sed -i "s/-a localuser %I/%I/g" /etc/systemd/system/getty.target.wants/getty@tty1.service
 EOF
    echo "\ After reboot you can change root password, if you need. "
    umount $system_target/dev
