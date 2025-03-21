@@ -1,13 +1,15 @@
-#!/usr/bin/bash
-# ---
+#!/usr/bin/bash 
+# --- 
 # 
-# Minimal System Group
+# Minimal System Group 
 # 
-# ---
-#
-# Writted by ZBookCMD | Robert Nilson
-#
+# --- 
+# 
+# Writted by ZBookCMD | Robert Nilson 
+# Current for Minimal System 0.2
+# 
 
+printf "\n"
 printf "This script is for installation distribution on disk. \n"
 printf "The script does not provide disk partitioning. \n"
 printf "You have to do it yourself via fdisk, parted, etc... \n"
@@ -31,7 +33,7 @@ PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin
 read -p "\ Enter Boot partition path: " boot_part
 read -p "\ Enter System partition path: " sys_part
 root_part=/dev/loop0
-mkfs_ext4="mkfs.ext4 -L miniSYS -O ^has_journal -F"
+mkfs_ext4="mkfs.ext4 -L minisys -O ^has_journal -F"
 mkfs_vfat="mkfs.fat -F32"
 
 mkdir -p /var/log/installation
@@ -97,7 +99,7 @@ fs_sys_part=$(blkid -o value -s TYPE "$sys_part")
 
 if [[ "$fs_sys_part" == "ext4" ]]; then
    echo "\ System partition formated in EXT4. " | tee -a $log
-   e2label "$sys_part" 'miniSYS'
+   e2label "$sys_part" 'minisys'
 elif [[ "$fs_sys_part" == "ext2" || "$fs_sys_part" == "ext3" ]]; then
    echo "\ Found a EXT2/EXT3 partition. "
    read -p "\ Convert to EXT4? " should_i_convert
@@ -112,7 +114,7 @@ elif [[ "$fs_sys_part" == "ext2" || "$fs_sys_part" == "ext3" ]]; then
              echo "\ System Partition is now converted to EXT4. " | tee -a $log
              e2fsck -pf $sys_part > $ext4_log 2>&1
 	     echo "\ Repair issues that might have occured. " | tee -a $log
-	     e2label "$sys_part" 'miniSYS'
+	     e2label "$sys_part" 'minisys'
 	     errors "$log"
 	     errors "$ext4_log"
         else
@@ -131,7 +133,7 @@ else
         if [[ "$exact_answer" == "Y" || "$exact_answer" == "y" ]]; then
              $mkfs_ext4 $sys_part > "ext4_log" 2>&1
              echo "\ System Partition is now formated in EXT4. " | tee -a $log
-	     e2label "$sys_part" 'miniSYS'
+	     e2label "$sys_part" 'minisys'
 	     errors "$log"
 	     errors "$ext4_log"
 	else
@@ -201,7 +203,6 @@ fi
 if [ -d $system_disk ]; then
     echo "\ Starting copy files... This may take a few minutes..." | tee -a $log
     mkdir -p $system_disk
-    rm -rf $system_target/lost+found
     cp -Rv $system_disk/* $system_target/. > $copy 2>&1
     errors "$log"
     errors "$copy"
@@ -337,7 +338,7 @@ rm -rf sbin/install-to-disk
 # Editing init for initrfs
 
 cp /etc/initrfs.d/init.file $system_target/etc/initrfs.d/init.file
-sed -i "s/UUID=XX/UUID=$uuis_system_init/g" $system_target/etc/initrfs.d/init.file
+sed -i "s/UUID=XX/UUID=$uuid_system_init/g" $system_target/etc/initrfs.d/init.file
 
 umount $system_disk | tee -a $log
 rm -rf $system_disk | tee -a $log
@@ -351,6 +352,7 @@ echo "\ Working in chroot"
 
 if [ -d $system_target ]; then
    mount --bind /dev $system_target/dev 
+   mount -t proc proc $system_target/proc
    chroot $system_target /bin/bash << EOF
    /sbin/userdel localuser
    /bin/rm -rf /Locals/localuser
@@ -373,6 +375,7 @@ if [ -d $system_target ]; then
 EOF
    echo "\ After reboot you can change root password, if you need. "
    umount $system_target/dev
+   umount $system_target/proc
    errors "$log"
 fi
 
