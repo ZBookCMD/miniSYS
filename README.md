@@ -4,7 +4,6 @@
   <img alt="Distribution logo which looks like red mathematics inequality" src="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/images/Logo_white.png">
 </picture>
 
-# Minimal System Alpha branch
 based on [Linux From Scratch](https://linuxfromscratch.org/) and [FemboyOS](https://github.com/Sugaryyyy/FemboyOS) \
 **Thanks a lot [Sugaryyyy](https://github.com/Sugaryyyy)**
 
