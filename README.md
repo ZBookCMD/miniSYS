@@ -1,33 +1,28 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/images/Logo.png">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/images/Logo_white.png">
-  <img alt="Distribution logo which looks like red mathematics inequality" src="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/images/Logo.png">
+  <img alt="Distribution logo which looks as Portal ASCII logo" src="https://raw.githubusercontent.com/ZBookCMD/miniSYS/refs/heads/alpha/images/Logo.png">
 </picture>
 
 based on [Linux From Scratch](https://linuxfromscratch.org/) and [FemboyOS](https://github.com/Sugaryyyy/FemboyOS) \
 **Thanks a lot [Sugaryyyy](https://github.com/Sugaryyyy)** \
-I know how infrequently I release updates... \
-but I have my own personal life like everyone else
 
-## PAcKet Manager
-Plans to make own manager \
-No, its not fork of Alpine APK \
-The basic structure and concept of a package is ready
+## Discontinued. 
+Whats that means?
+miniSYS as a project based on FemboyOS will be discontinued. \
+Instead, work continues on [Minimal System](https://github.com/ZBookCMD/minimal_system) as something completely new. \
+New base, new kernel, own license, its own fullish new package manager.
 
+## When supports ends?
+Support for version v0.2-Alpha has been discontinued. \
+Development of v0.3(.2)-Alpha is currently underway as an interim version, and immediately after its release, 
+the project will be officially closed, with future releases appearing under a new name and in a new repository. \
 
-## Will be soon
-My plans for future Alpha releases:
-- more libraries support
-- drivers for a lot things
-- Xorg & Wayland 
-- own repositories
-- XFCE4 & GNUstep 
-- and more.. more... 
+The repository will be moved to the archive. All personal contributions will be improved and transferred. 
 
-
-## But wait.. Whats work now?
-Really, not too much. But for now I (alone..) am working on this. \
-For now distro have basic programs as GCC, bash, and even `lsusb`. \
+## Whats works now?
+Really, not too much. But for now I'm working on this. \
+For now distro have basic programs as GCC, bash, and even usbutils. \
 You can check the parameters in the list below.
 
 | Parameter            | Boolean | Tested and works                  |
@@ -54,4 +49,5 @@ You can check the parameters in the list below.
 | Virtual Machine boot | Partial | QEMU works and optimized for UTM  |
 | LiveCD               | Unknown | Uhh.. init in initrfs corrupted   |
 | Secure boot          | Unknown | Depends on bootloader, not tried  |
----
+
+
